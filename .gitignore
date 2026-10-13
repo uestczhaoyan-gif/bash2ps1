@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.test-work/
+preview.png
+build/
+dist/
+*.egg-info/
+cli-example.ps1
