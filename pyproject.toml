@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "bash2ps1"
 version = "0.2.0"
-description = "A local desktop converter for common Bash steps to PowerShell 5.1 and 7"
+description = "Convert common Bash scripts to native PowerShell 5.1/7 with diagnostics and bundled child scripts"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []

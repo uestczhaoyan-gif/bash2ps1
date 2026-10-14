@@ -2,6 +2,8 @@
 
 ## 0.2.0
 
+- 说明原生 PowerShell 转换目标与实际兼容边界，新增 Bash/PowerShell 输出差异审计；不将已通过用例宣传为任意脚本等价转换。
+
 - 补齐真实训练流水线常见语法：`if/elif/else`、`while/until`、列表 `for`、`!`、`$()`/反引号和嵌套 `${...}` 默认值及必填检查。
 - 支持 `$0`/位置参数、变量指定的可执行程序、`set -a`、`pipefail` 和文本管道退出码；grep 无匹配返回失败。
 - 转换 `sleep`、`date -Is`、`dirname/basename`、常用 `find` 选项和多占位符 `printf`，文件重定向保留 printf 的精确换行。

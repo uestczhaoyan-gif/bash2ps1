@@ -2,13 +2,17 @@
 
 [简体中文](#简体中文) · [English](#english)
 
-**把常见 Bash 安装、配置和构建步骤，转换为 Windows PowerShell 5.1 / PowerShell 7 可运行的脚本。**
+**把常见 Bash 脚本转换为原生 Windows PowerShell 5.1 / PowerShell 7 脚本，支持条件循环、变量展开和子脚本打包。**
 
-**Convert common Bash setup, configuration, and build steps into scripts for Windows PowerShell 5.1 and PowerShell 7.**
+**Convert common Bash scripts into native Windows PowerShell 5.1 / PowerShell 7 scripts, with conditions, loops, variable expansion, and bundled child scripts.**
 
 本地桌面工具，提供粘贴、预览、诊断定位、复制和保存功能。转换不联网、不执行输入。不能可靠转换的语法会生成明确诊断和停止保护。
 
 A local desktop utility with paste, preview, source-line diagnostics, copy, and save. Conversion runs offline and never executes the input. Unsupported syntax produces explicit diagnostics and an execution guard.
+
+**转换目标与当前状态：**输出不依赖 Bash/WSL，外部程序仍需具备 Windows 版本及所需数据。当前是覆盖部分 Bash 语法的转换器，**尚未达到任意 `.sh` 全量等价转换**。转换没有 ERROR、已有测试通过，都不能证明任意输入的运行结果等价。已支持的部分文本操作仍存在记录在案的行为差异，详见 [原生转换兼容性审计](docs/compatibility.md)。
+
+**Target and status:** generated scripts do not depend on Bash/WSL; external programs still require Windows implementations and their data. This converter supports a subset of Bash and **does not provide equivalent conversion for arbitrary `.sh` files**. No ERROR diagnostics or passing tests establish universal equivalence. Some accepted text operations still differ in behavior; see the [native conversion compatibility audit](docs/compatibility.md).
 
 ![Desktop interface / 桌面界面](docs/screenshot.png)
 
