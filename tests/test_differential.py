@@ -241,7 +241,9 @@ class DifferentialTests(unittest.TestCase):
             manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
             status_path = cls.root / ('status' + str(number) + '.json')
             driver = cls.root / ('runner' + str(number) + '.ps1')
-            driver.write_text("""$cases=Get-Content -Raw -Encoding UTF8 -LiteralPath 'MANIFEST'|ConvertFrom-Json
+            driver.write_text("""# Exercise the UTF-8 console encoding used by clean Windows CI hosts.
+[Console]::InputEncoding=New-Object Text.UTF8Encoding($true)
+$cases=Get-Content -Raw -Encoding UTF8 -LiteralPath 'MANIFEST'|ConvertFrom-Json
 $results=@()
 foreach($case in $cases){
  $saved=[Environment]::GetEnvironmentVariables('Process')

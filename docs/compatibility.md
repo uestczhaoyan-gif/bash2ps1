@@ -27,7 +27,7 @@
 | `printf 'x' \| wc -l` | `1\r\n` | `0\n` |
 | `X="$(printf '%s' a; printf '%s' b)"; printf '%s' "$X"` | `a\r\nb\r\n` | `ab` |
 
-同时验证了普通文本以外的二进制重定向、native stdin/stdout/stderr、错误流合并顺序、重定向顺序、8 位 Bash 退出码、函数局部变量、空环境变量、两种 PowerShell 的环境变量删除差异和多项临时环境赋值。
+同时验证了普通文本以外的二进制重定向、native stdin/stdout/stderr、错误流合并顺序、重定向顺序、8 位 Bash 退出码、函数局部变量、空环境变量、两种 PowerShell 的环境变量删除差异和多项临时环境赋值。GitHub 的干净 UTF-8 控制台环境进一步发现 PowerShell 5.1 的原生 stdin 写入器会额外输出 BOM；已在启动时明确设置无 BOM 编码并恢复控制台设置，对照驱动也固定覆盖带 BOM 的控制台输入编码条件。
 
 ## 已知边界
 

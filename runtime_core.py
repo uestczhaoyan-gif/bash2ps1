@@ -180,7 +180,11 @@ function Invoke-B2PSNative([string] $Name,[string[]] $ArgumentList=@()){
         $script:B2PSStatus=([B2PS.NativeMerged]::Run($info.FileName,$info.Arguments,$info.WorkingDirectory,$inputStream,$script:B2PSIO.Out)) -band 255;return
     }
     $process=New-Object Diagnostics.Process;$process.StartInfo=$info
-    try{$null=$process.Start();$outTask=$process.StandardOutput.BaseStream.CopyToAsync($script:B2PSIO.Out);$errTask=$process.StandardError.BaseStream.CopyToAsync($script:B2PSIO.Err)
+    try{
+        $restoreInputEncoding=$false;$savedInputEncoding=[Console]::InputEncoding
+        try{if($info.RedirectStandardInput){if($info.PSObject.Properties['StandardInputEncoding']){$info.StandardInputEncoding=$script:B2PSUtf8}else{[Console]::InputEncoding=$script:B2PSUtf8;$restoreInputEncoding=$true}};$null=$process.Start()}
+        finally{if($restoreInputEncoding){[Console]::InputEncoding=$savedInputEncoding}}
+        $outTask=$process.StandardOutput.BaseStream.CopyToAsync($script:B2PSIO.Out);$errTask=$process.StandardError.BaseStream.CopyToAsync($script:B2PSIO.Err)
         if($info.RedirectStandardInput){try{$script:B2PSIO.In.CopyTo($process.StandardInput.BaseStream)}catch{}finally{$process.StandardInput.Close()}}
         $process.WaitForExit();$null=$outTask.GetAwaiter().GetResult();$null=$errTask.GetAwaiter().GetResult();$script:B2PSStatus=$process.ExitCode -band 255
     }finally{$process.Dispose()}
