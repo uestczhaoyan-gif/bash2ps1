@@ -23,7 +23,7 @@ def run_ps(source, engine, directory, after=''):
     if result.errors:
         raise AssertionError(result.errors)
     script = Path(directory) / 'test.ps1'
-    script.write_text(result.script + '\n' + after, encoding='utf-8-sig')
+    script.write_text(result.script.replace('# B2PS final status', after + '\n# B2PS final status'), encoding='utf-8-sig')
     return subprocess.run([engine, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', str(script)],
                           cwd=directory, capture_output=True, timeout=30)
 
@@ -44,13 +44,14 @@ class TranslationTests(unittest.TestCase):
 
     def test_unsupported_input_is_guarded(self):
         sources = ['sudo apt install x', 'if test -f a; then echo ok',
-                   'for x in a b; do echo "$x"', 'cat <<EOF\nx\nEOF',
-                   'echo $((1+2))', 'NAME=$(date', 'echo `date',
-                   'echo ${NAME:1:2}', 'echo $!', "echo $'\\n'", 'echo *.txt',
+                   'for x in a b; do echo "$x"', 'cat <<EOF\nx\n',
+                   'echo $((1+))', 'NAME=$(date', 'echo `date',
+                   'echo ${NAME@Q}', 'echo $!', "echo $'unfinished", 'eval "$X"',
                    'chmod +x file', 'echo hello & echo bye', 'set -o noclobber',
-                   'export PATH="$HOME/bin:$PATH"', 'git show | head', 'curl URL > out',
-                   'echo "unfinished', 'echo abc\\', 'echo a 2>&1', 'echo ok &&',
-                   'bash other.sh', 'unknown < file', 'grep -n foo file']
+                   'trap cleanup EXIT', 'git show |', 'echo hello >',
+                   'echo "unfinished', 'echo abc\\', 'echo a 3>&1', 'echo ok &&',
+                   'bash other.sh', 'unknown <', 'find . -delete',
+                   'cat 0<&1', 'echo x 0>out', 'echo x 2>&3']
         for source in sources:
             with self.subTest(source=source):
                 result = convert(source)

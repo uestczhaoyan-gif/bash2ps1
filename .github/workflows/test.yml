@@ -10,6 +10,9 @@ permissions:
 jobs:
   test:
     runs-on: windows-latest
+    env:
+      B2PS_REQUIRE_BASH: "1"
+      B2PS_BASH: 'C:\Program Files\Git\bin\bash.exe'
     strategy:
       matrix:
         python-version: ["3.10", "3.13"]
@@ -25,5 +28,7 @@ jobs:
           powershell.exe -NoProfile -Command '$PSVersionTable.PSVersion'
       - name: Run conversion and PowerShell integration tests
         run: python -m unittest discover -s tests -v
+      - name: Check desktop file context and clipboard state
+        run: python tests/preview_ui.py
       - name: Check CLI example
         run: python app.py examples/setup.sh -o cli-example.ps1

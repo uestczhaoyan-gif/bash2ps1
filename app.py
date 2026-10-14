@@ -34,7 +34,7 @@ class App:
         self.source_path: Path | None = None
         self.dirty = True
         self.issue_rows = []
-        root.title('Bash → PowerShell · 步骤转换器')
+        root.title('Bash → PowerShell · 1.0.0')
         width = min(1180, root.winfo_screenwidth() - 60)
         height = min(790, root.winfo_screenheight() - 100)
         root.geometry(f'{width}x{height}')
@@ -96,7 +96,7 @@ class App:
         self.diagnostics.tag_configure('error', foreground='#b4232d')
         self.diagnostics.tag_configure('warning', foreground='#9a6510')
         self.diagnostics.bind('<Double-1>', self.go_to_issue)
-        ttk.Label(outer, text='支持条件、循环、命令替换和嵌套默认值。打开 .sh 可自动打包子脚本；转换不会执行输入。', style='Sub.TLabel').pack(anchor='w', pady=(9, 0))
+        ttk.Label(outer, text='支持常用命令、函数、数组、算术、条件循环和重定向。打开 .sh 自动打包子脚本；转换不会执行输入。', style='Sub.TLabel').pack(anchor='w', pady=(9, 0))
         root.bind('<Control-Return>', lambda event: self.run_convert())
         root.bind('<Control-o>', lambda event: self.open_file())
         root.bind('<Control-s>', lambda event: self.save())
@@ -171,7 +171,7 @@ class App:
 
     def replace_input(self, source, path: Path | None = None):
         self.source_path = path
-        self.root.title('Bash → PowerShell · ' + (path.name if path else '步骤转换器'))
+        self.root.title('Bash → PowerShell · ' + (path.name if path else '1.0.0'))
         self.input.delete('1.0', 'end')
         self.input.insert('1.0', source)
         self.root.update_idletasks()
@@ -183,7 +183,7 @@ class App:
 
     def clear(self):
         self.source_path = None
-        self.root.title('Bash → PowerShell · 步骤转换器')
+        self.root.title('Bash → PowerShell · 1.0.0')
         self.input.delete('1.0', 'end')
         self.output.configure(state='normal')
         self.output.delete('1.0', 'end')

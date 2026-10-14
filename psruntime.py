@@ -1,165 +1,5 @@
-"""PowerShell 5.1-compatible helpers embedded in every converted script."""
-
+"""Pure PowerShell helpers for date, environment files and directory traversal."""
 EXTENDED_RUNTIME = r'''
-$script:B2PSPipefail = $false
-$script:B2PSAllExport = $false
-$script:B2PSGuardDepth = 0
-$script:B2PSExpansionStatus = $null
-$script:B2PSArgs = @($args)
-$script:B2PSSource = $PSCommandPath
-$script:B2PSZero = $PSCommandPath
-$script:B2PSScripts = @{}
-
-function Stop-B2PSFatal([string] $Message) {
-    $errorObject = New-Object System.Exception($Message)
-    $errorObject.Data['B2PSFatal'] = $true
-    throw $errorObject
-}
-
-function Expand-B2PSParameter([string] $Name, [string] $Operator, [scriptblock] $Fallback) {
-    $set = $script:B2PSVars.ContainsKey($Name) -or $null -ne [Environment]::GetEnvironmentVariable($Name, 'Process')
-    if ($Name -in @('?', '#', 'HOME', 'PWD', 'BASH_SOURCE')) { $set = $true }
-    if ($Name -match '^\d+$') { $set = $Name -eq '0' -or [int]$Name -le $script:B2PSArgs.Count }
-    $value = if ($set) { Get-B2PSValue $Name } else { '' }
-    $missing = -not $set -or ($Operator.StartsWith(':') -and $value -eq '')
-    switch ($Operator.TrimStart(':')) {
-        '-' { if ($missing) { return [string](& $Fallback) }; return $value }
-        '+' { if (-not $missing) { return [string](& $Fallback) }; return '' }
-        '=' {
-            if ($missing) { $value = [string](& $Fallback); Set-B2PSValue $Name $value }
-            return $value
-        }
-        '?' {
-            if ($missing) {
-                $message = [string](& $Fallback)
-                if (-not $message) { $message = 'parameter is unset or empty' }
-                $errorObject = New-Object System.Exception("${Name}: $message")
-                $errorObject.Data['B2PSFatal'] = $true
-                throw $errorObject
-            }
-            return $value
-        }
-    }
-}
-function Copy-B2PSDictionary($Dictionary) {
-    $copy = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
-    foreach ($key in $Dictionary.Keys) { $copy[$key] = $Dictionary[$key] }
-    return ,$copy
-}
-function Enter-B2PSSubshell([switch] $ExportedOnly) {
-    $saved = [pscustomobject]@{
-        Vars = $script:B2PSVars; Exported = $script:B2PSExported; Status = $script:B2PSStatus
-        Errexit = $script:B2PSErrexit; Unset = $script:B2PSUnset; Pipefail = $script:B2PSPipefail
-        AllExport = $script:B2PSAllExport; GuardDepth = $script:B2PSGuardDepth
-        ExpansionStatus = $script:B2PSExpansionStatus; Source = $script:B2PSSource; Arguments = $script:B2PSArgs
-        Zero = $script:B2PSZero
-        Directory = (Get-Location).Path; Environment = [Environment]::GetEnvironmentVariables('Process')
-    }
-    $script:B2PSVars = Copy-B2PSDictionary $saved.Vars
-    $script:B2PSExported = New-Object 'System.Collections.Generic.Dictionary[string,bool]' ([StringComparer]::Ordinal)
-    foreach ($key in $saved.Exported.Keys) { $script:B2PSExported[$key] = $true }
-    if ($ExportedOnly) {
-        $script:B2PSVars.Clear()
-        $script:B2PSErrexit = $false; $script:B2PSUnset = $false; $script:B2PSPipefail = $false
-        $script:B2PSAllExport = $false; $script:B2PSGuardDepth = 0
-    }
-    return $saved
-}
-function Restore-B2PSSubshell($Saved) {
-    $current = [Environment]::GetEnvironmentVariables('Process')
-    foreach ($key in $current.Keys) {
-        if (-not $Saved.Environment.Contains($key)) { [Environment]::SetEnvironmentVariable($key, $null, 'Process') }
-    }
-    foreach ($key in $Saved.Environment.Keys) { [Environment]::SetEnvironmentVariable($key, $Saved.Environment[$key], 'Process') }
-    Set-Location -LiteralPath $Saved.Directory
-    $script:B2PSVars = $Saved.Vars; $script:B2PSExported = $Saved.Exported
-    $script:B2PSStatus = $Saved.Status; $script:B2PSErrexit = $Saved.Errexit
-    $script:B2PSUnset = $Saved.Unset; $script:B2PSPipefail = $Saved.Pipefail
-    $script:B2PSAllExport = $Saved.AllExport; $script:B2PSGuardDepth = $Saved.GuardDepth
-    $script:B2PSExpansionStatus = $Saved.ExpansionStatus
-    $script:B2PSSource = $Saved.Source; $script:B2PSArgs = $Saved.Arguments
-    $script:B2PSZero = $Saved.Zero
-}
-function Invoke-B2PSCapture([scriptblock] $Action) {
-    $saved = Enter-B2PSSubshell
-    $status = 0
-    try {
-        # Bash normally clears errexit in command substitutions.
-        $script:B2PSErrexit = $false
-        $lines = @(& $Action)
-        $status = $script:B2PSStatus
-        $text = ($lines | ForEach-Object { [string]$_ }) -join "`n"
-        return $text.TrimEnd([char[]]"`r`n")
-    } finally {
-        Restore-B2PSSubshell $saved
-        $script:B2PSExpansionStatus = $status
-    }
-}
-function Test-B2PSCondition([scriptblock] $Action) {
-    $script:B2PSGuardDepth++
-    try { & $Action | Out-Host; return $script:B2PSStatus -eq 0 }
-    finally { $script:B2PSGuardDepth-- }
-}
-function Invoke-B2PSPipeline([scriptblock[]] $Stages) {
-    $values = @(); $lastFailure = 0; $status = 0
-    foreach ($stage in $Stages) {
-        $buffer = New-Object 'System.Collections.Generic.List[object]'
-        $script:B2PSStatus = 0
-        try {
-            & $stage $values | ForEach-Object { $buffer.Add($_) }
-            $status = $script:B2PSStatus
-        } catch {
-            if ($_.Exception.Data.Contains('B2PSFatal')) { throw }
-            $status = 1
-            if ($_.Exception.Data.Contains('B2PSExitCode')) { $status = [int]$_.Exception.Data['B2PSExitCode'] }
-            else { Write-Warning $_.Exception.Message }
-        }
-        $values = $buffer.ToArray()
-        if ($status -ne 0) { $lastFailure = $status }
-    }
-    $script:B2PSStatus = if ($script:B2PSPipefail -and $lastFailure) { $lastFailure } else { $status }
-    Write-Output $values
-    if ($script:B2PSStatus -ne 0) {
-        $errorObject = New-Object System.Exception('Bash pipeline failed')
-        $errorObject.Data['B2PSExitCode'] = $script:B2PSStatus
-        throw $errorObject
-    }
-}
-function Invoke-B2PSGrep([object[]] $Lines, [string] $Pattern, [switch] $Fixed, [switch] $IgnoreCase, [switch] $Invert) {
-    $found = $false
-    foreach ($line in $Lines) {
-        if ($Fixed) {
-            $comparison = if ($IgnoreCase) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-            $matched = ([string]$line).IndexOf($Pattern, $comparison) -ge 0
-        } else {
-            $options = if ($IgnoreCase) { [Text.RegularExpressions.RegexOptions]::IgnoreCase } else { [Text.RegularExpressions.RegexOptions]::None }
-            $matched = [regex]::IsMatch([string]$line, $Pattern, $options)
-        }
-        if ($Invert) { $matched = -not $matched }
-        if ($matched) { $found = $true; Write-Output $line }
-    }
-    $script:B2PSStatus = if ($found) { 0 } else { 1 }
-    Assert-B2PSTest $found
-}
-function Find-B2PSPath([string] $Path, [int] $MinDepth = 0, [int] $MaxDepth = 2147483647,
-                      [string] $Type = '', [string] $Pattern = '*', [switch] $IgnoreCase) {
-    $root = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
-    $pending = New-Object 'System.Collections.Generic.Stack[object]'
-    $pending.Push(@($root, 0))
-    while ($pending.Count) {
-        $entry = $pending.Pop(); $item = $entry[0]; $depth = [int]$entry[1]
-        $matched = if ($IgnoreCase) { $item.Name -like $Pattern } else { $item.Name -clike $Pattern }
-        if ($depth -ge $MinDepth -and $matched -and
-            (($Type -eq '') -or ($Type -eq 'd' -and $item.PSIsContainer) -or ($Type -eq 'f' -and -not $item.PSIsContainer))) {
-            $item.FullName
-        }
-        # Do not follow junctions/symlinks, matching find's default traversal.
-        if ($item.PSIsContainer -and $depth -lt $MaxDepth -and -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            $children = @(Get-ChildItem -LiteralPath $item.FullName -Force -ErrorAction Stop | Sort-Object Name -Descending)
-            foreach ($child in $children) { $pending.Push(@($child, ($depth + 1))) }
-        }
-    }
-}
 function Get-B2PSDate([string] $Format = '', [switch] $Utc) {
     $date = if ($Utc) { [DateTimeOffset]::UtcNow } else { [DateTimeOffset]::Now }
     if ($Format -eq '' -or $Format -eq '-Is' -or $Format -eq '--iso-8601=seconds') { return $date.ToString('yyyy-MM-ddTHH:mm:sszzz') }
@@ -182,51 +22,6 @@ function Get-B2PSDate([string] $Format = '', [switch] $Utc) {
         } else { $null = $result.Append($format[$i]) }
     }
     return $result.ToString()
-}
-function Format-B2PSPrintf([string] $Format, [string[]] $Values = @()) {
-    $result = New-Object Text.StringBuilder
-    $index = 0
-    do {
-        $before = $index
-        for ($i = 0; $i -lt $Format.Length; $i++) {
-            $c = $Format[$i]
-            if ($c -eq '\' -and $i + 1 -lt $Format.Length) {
-                $i++
-                switch ([string]$Format[$i]) {
-                    'n' { $null = $result.Append("`n") }
-                    'r' { $null = $result.Append("`r") }
-                    't' { $null = $result.Append("`t") }
-                    '\' { $null = $result.Append('\') }
-                    default { throw "Unsupported printf escape: \$($Format[$i])" }
-                }
-            } elseif ($c -eq '%') {
-                $i++
-                if ($Format[$i] -eq '%') { $null = $result.Append('%'); continue }
-                $value = if ($index -lt $Values.Count) { $Values[$index] } else { '' }
-                $index++
-                switch ([string]$Format[$i]) {
-                    's' { $null = $result.Append($value) }
-                    'd' { $number = if ($value -eq '') { 0 } else { [long]::Parse($value, [Globalization.CultureInfo]::InvariantCulture) }; $null = $result.Append($number) }
-                    'i' { $number = if ($value -eq '') { 0 } else { [long]::Parse($value, [Globalization.CultureInfo]::InvariantCulture) }; $null = $result.Append($number) }
-                    default { throw "Unsupported printf format: %$($Format[$i])" }
-                }
-            } else { $null = $result.Append($c) }
-        }
-    } while ($index -lt $Values.Count -and $index -gt $before)
-    return $result.ToString()
-}
-function Write-B2PSFileText([string] $Path, [string] $Text, [switch] $Append) {
-    $encoding = New-Object Text.UTF8Encoding($false)
-    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
-    if ($Append) { [IO.File]::AppendAllText($resolved, $Text, $encoding) }
-    else { [IO.File]::WriteAllText($resolved, $Text, $encoding) }
-}
-function ConvertTo-B2PSLines([string] $Text) {
-    if ($Text -eq '') { return }
-    $lines = [regex]::Split($Text, '\r?\n')
-    $count = $lines.Count
-    if ($Text.EndsWith("`n")) { $count-- }
-    for ($i = 0; $i -lt $count; $i++) { Write-Output $lines[$i] }
 }
 function Import-B2PSEnv([string] $Path) {
     $number = 0
@@ -263,26 +58,23 @@ function Import-B2PSEnv([string] $Path) {
         Set-B2PSValue $name $value.ToString() -Export:$export
     }
 }
-function Invoke-B2PSScript([string] $Path, [string[]] $ArgumentList = @(), [switch] $Source) {
-    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
-    if (-not $script:B2PSScripts.ContainsKey($resolved)) { throw "Script not included in conversion: $Path. Open the original .sh file and convert again to include its dependencies." }
-    $saved = if ($Source) { $null } else { Enter-B2PSSubshell -ExportedOnly }
-    $oldSource = $script:B2PSSource; $oldArgs = $script:B2PSArgs
-    $status = 0
-    try {
-        $script:B2PSSource = $resolved
-        if (-not $Source) { $script:B2PSZero = $resolved }
-        if (-not $Source -or $ArgumentList.Count) { $script:B2PSArgs = $ArgumentList }
-        & $script:B2PSScripts[$resolved]
-        $status = $script:B2PSStatus
-        if ($status -ne 0) {
-            $errorObject = New-Object System.Exception("$Path exited with code $status")
-            $errorObject.Data['B2PSExitCode'] = $status
-            throw $errorObject
+function Find-B2PSPath([string] $Path, [int] $MinDepth = 0, [int] $MaxDepth = 2147483647,
+                      [string] $Type = '', [string] $Pattern = '*', [switch] $IgnoreCase) {
+    $root = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    $pending = New-Object 'System.Collections.Generic.Stack[object]'
+    $pending.Push(@($root, 0))
+    while ($pending.Count) {
+        $entry = $pending.Pop(); $item = $entry[0]; $depth = [int]$entry[1]
+        $matched = if ($IgnoreCase) { $item.Name -like $Pattern } else { $item.Name -clike $Pattern }
+        if ($depth -ge $MinDepth -and $matched -and
+            (($Type -eq '') -or ($Type -eq 'd' -and $item.PSIsContainer) -or ($Type -eq 'f' -and -not $item.PSIsContainer))) {
+            $item.FullName
         }
-    } finally {
-        if ($saved) { Restore-B2PSSubshell $saved }
-        else { $script:B2PSSource = $oldSource; $script:B2PSArgs = $oldArgs }
+        # Do not follow junctions/symlinks, matching find's default traversal.
+        if ($item.PSIsContainer -and $depth -lt $MaxDepth -and -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            $children = @(Get-ChildItem -LiteralPath $item.FullName -Force -ErrorAction Stop | Sort-Object Name -Descending)
+            foreach ($child in $children) { $pending.Push(@($child, ($depth + 1))) }
+        }
     }
 }
 '''

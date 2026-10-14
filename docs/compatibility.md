@@ -1,37 +1,42 @@
-# 原生 PowerShell 转换兼容性审计
+# 1.0.0 核心验收与结题记录
 
-审计日期：2026-10-14。被审计的代码基线：`726031e`（0.2.0）。
+日期：2026-10-14。结题范围：常见、可移植的 Bash 自动化脚本，输出原生 Windows PowerShell 5.1 / PowerShell 7，不依赖 Bash/WSL。
 
-用户要求输出原生 PowerShell 命令，不依赖 Bash 或 WSL。当前代码尚未达到“任意 Bash 文件都能等价转换”的结项要求。此前的 39 项测试和 Qwen 流水线模拟验证证明了这些具体用例通过，不能据此推导任意脚本正确。
+用户已将“所有可能脚本”调整为“常用、广泛使用的命令”，并要求完成语义修正、常用语法/命令覆盖和对照测试三项工作。1.0.0 按 README 的具体支持清单验收；Linux 专用系统操作、动态 Shell 代码、后台/交互/无限输出和高级工具方言保留明确适配边界。
 
-## 三类问题需要区分
+## 三项验收
 
-1. **未覆盖的 Bash 语法。**函数、`case`、数组、算术展开、`$@/$*`、here-document、输入/错误重定向、外部程序管道等仍会被拒绝。这些属于转换器可继续实现的核心能力。
-2. **已接受输入的行为差异。**文本换行、未加引号变量的单词拆分、命令替换和文本管道仍有近似行为。没有 ERROR 不等于原样保留语义；其中部分差异会提示，部分仅在 README 中说明。
-3. **宿主环境差异。**Bash 可以调用任意外部程序，访问 Linux 专用文件和内核接口，依赖特定服务、权限或工具选项。补齐 Shell 语法不会自动提供这些系统能力。原生 PowerShell 输出需要对应的 Windows 实现、依赖和路径信息；缺少这些信息时无法保证保持原脚本效果。
+| 项目 | 结果与证据 |
+| --- | --- |
+| 修正已接受语法中的行为差异 | 输出改为原始字节流；保留 printf 精确换行、无换行命令替换片段、空参数、IFS 拆分、通配符、临时环境展开顺序、退出码和文件内容；Windows 原生错误流用同一 OS 管道合并 |
+| 补齐常用语法和命令 | 函数/local/return、数组、整数算术/C 风格 for、case、位置参数、组合命令、子 Shell、here-document、常用重定向；补齐 grep/sort/uniq/cut/tr/tee/sed/awk/xargs/read/env 等实际操作，选项范围由 command_specs.py 定义 |
+| Bash 对照与真实工作流回归 | 160 个受控场景分别与 PowerShell 5.1、7 比较，共 320 组引擎对照；检查标准输出、标准错误、退出码和文件内容。另保留原有回归及 Qwen 完整流水线模拟；桌面文件上下文、复制状态及 CLI 输出已验证 |
 
-完整 Bash 语法可以通过编译或在 PowerShell 中实现解释器继续扩展；这不等于解决任意脚本的外部环境依赖。本项目不能作出“无需 Bash/WSL、任意 Linux 脚本自动等价运行”的承诺。
+本地完整测试：`python -m unittest discover -s tests -v`，40 个测试入口通过，其中对照入口包含 154 场景/308 组引擎对照。之后增加 5 个 cat/grep 选项场景，并连同 4 个受影响旧场景在两个引擎中对照通过；最后增加的标准输出/错误流文件合并场景和受影响重定向场景也已在两个引擎对照通过。最终测试集合共 160 场景，CI 对完整集合运行，禁止以缺少 Bash 后跳过测试视为通过。
 
-## 已复现的行为差异
+所有执行测试仅使用本地受控程序和项目 `.test-work` 临时目录。原始 Qwen 工作流通过模拟下载失败两次、第三次成功，继而训练、预测、评估与完成文件的过程验证；未下载模型或实际训练。
 
-下面四个受控输入分别在本机 Git Bash、Windows PowerShell 5.1 和 PowerShell 7 中执行。转换器对它们均未产生 ERROR。两种 PowerShell 的结果相同。表中使用字节转义表示换行。
+## 0.2.0 审计问题的修复结果
 
-| 输入 | Bash 标准输出 | 生成的 PowerShell 标准输出 |
+以下输入在旧代码基线 `726031e` 曾存在行为差异。1.0.0 两种 PowerShell 的标准输出与真实 Bash 完全相同，表中用字节转义表示换行。
+
+| 输入 | 旧 PowerShell 输出 | 1.0.0 与 Bash 输出 |
 | --- | --- | --- |
-| `printf '%s' hello` | `hello` | `hello\r\n` |
-| `WORDS="a b"; printf '<%s>\n' $WORDS` | `<a>\n<b>\n` | `<a b>\r\n` |
-| `printf 'x' \| wc -l` | `0\n` | `1\r\n` |
-| `X="$(printf '%s' a; printf '%s' b)"; printf '%s' "$X"` | `ab` | `a\r\nb\r\n` |
+| `printf '%s' hello` | `hello\r\n` | `hello` |
+| `WORDS="a b"; printf '<%s>\n' $WORDS` | `<a b>\r\n` | `<a>\n<b>\n` |
+| `printf 'x' \| wc -l` | `1\r\n` | `0\n` |
+| `X="$(printf '%s' a; printf '%s' b)"; printf '%s' "$X"` | `a\r\nb\r\n` | `ab` |
 
-第二个用例反映字段拆分差异；第四个用例反映命令替换对无换行输出的拼接差异，不能仅靠将 CRLF 换成 LF 修复。第三个用例要求按换行字符计数，而非按 PowerShell 文本记录数计数。
+同时验证了普通文本以外的二进制重定向、native stdin/stdout/stderr、错误流合并顺序、重定向顺序、8 位 Bash 退出码、函数局部变量、空环境变量、两种 PowerShell 的环境变量删除差异和多项临时环境赋值。
 
-## 后续核心改进的优先级
+## 已知边界
 
-1. 修正已接受输入中的输出、参数和状态语义；暂时不能精确保留时应给出明确诊断，避免仅以“成功生成脚本”表示等价。
-2. 扩展结构化解析与变量模型，补齐可移植脚本中的函数、数组、算术、位置参数、here-document、重定向和进程管道。
-3. 为跨平台命令定义具体兼容范围；未知命令和 Linux 专用操作应明确说明所缺能力，不能把保留同名调用视为已移植实现。
-4. 增加 Bash 与 PowerShell 的对照回归测试，比较参数、标准输出、标准错误、退出码和文件变化；新增语法要与错误分支、嵌套、空参数、空格路径和 Unicode 组合验证。
+- Bash 的可移植语法可以继续实现；本版本保证范围以 README 清单和回归用例为准，不声称完整实现 Bash 或完整 sed/awk/GNU 工具方言。
+- 外部程序需要对应的 Windows 可执行版本、依赖和数据。文件路径及权限使用 Windows 语义；Unix 包管理器、权限/内核接口不能靠命令改写提供。
+- 有限管道在阶段之间缓冲原始字节，适用于自动化脚本。持续流、TTY 交互、作业控制、Unix 信号/SIGPIPE 和无限输出需要其他执行设计，不在本次结题范围。
+- 文本工具以 UTF-8 和普通 BRE/ERE 为核心；特定区域设置、复杂正则、动态 source 路径、任意文件描述符及未列出的选项需要明确适配。
+- `.env` 运行时读取普通赋值，不作为完整 Shell 程序执行；原项目移动后需重新转换静态依赖路径。
 
-这些是核心转换工作，不需要增加界面、联网转换或其他周边功能。支持范围内的正确性可以逐项验证；有限的测试集合不能证明“所有可能 Bash 文件”的等价性。当前应保持未达到全量结项要求的状态。
+在用户确认的常用、可移植范围内，三个核心阶段已完成，1.0.0 可作为结题版本。后续维护按具体可复现脚本处理转换缺陷，不将周边功能作为本次完成条件。
 
-参考：[Bash 展开规则](https://www.gnu.org/s/bash/manual/html_node/Shell-Expansions.html)、[PowerShell 参数解析](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing)、[PowerShell 管道](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pipelines)。
+参考：[Bash 手册](https://www.gnu.org/s/bash/manual/bash.html)、[GNU Coreutils](https://www.gnu.org/software/coreutils/manual/coreutils.html)、[Windows 子进程重定向](https://learn.microsoft.com/en-us/windows/win32/procthread/creating-a-child-process-with-redirected-input-and-output)。

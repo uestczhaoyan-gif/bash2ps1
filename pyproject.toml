@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bash2ps1"
-version = "0.2.0"
+version = "1.0.0"
 description = "Convert common Bash scripts to native PowerShell 5.1/7 with diagnostics and bundled child scripts"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,4 +22,4 @@ bash2ps1 = "app:main"
 bash2ps1-gui = "app:gui_main"
 
 [tool.setuptools]
-py-modules = ["app", "converter", "shellsyntax", "psruntime"]
+py-modules = ["app", "converter", "compiler", "arithmetic", "shellsyntax", "runtime_core", "native_runtime", "psruntime", "command_runtime", "text_runtime", "command_specs"]

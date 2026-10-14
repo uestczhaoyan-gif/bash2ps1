@@ -1,226 +1,95 @@
-# bash2ps1 — Bash → PowerShell
+# bash2ps1 — Bash → 原生 PowerShell
 
-[简体中文](#简体中文) · [English](#english)
+**将常见 Bash 自动化脚本转换为 Windows PowerShell 5.1 / PowerShell 7 脚本。**
 
-**把常见 Bash 脚本转换为原生 Windows PowerShell 5.1 / PowerShell 7 脚本，支持条件循环、变量展开和子脚本打包。**
+本地桌面工具，支持文件导入、粘贴、预览、诊断定位、复制及保存。输出不调用 Bash/WSL；转换时不联网、不执行输入。版本 **1.0.0** 完成了输出语义修正、常用语法/命令覆盖和 Bash 对照验证三个核心阶段。
 
-**Convert common Bash scripts into native Windows PowerShell 5.1 / PowerShell 7 scripts, with conditions, loops, variable expansion, and bundled child scripts.**
+![桌面界面](docs/screenshot.png)
 
-本地桌面工具，提供粘贴、预览、诊断定位、复制和保存功能。转换不联网、不执行输入。不能可靠转换的语法会生成明确诊断和停止保护。
+## 使用
 
-A local desktop utility with paste, preview, source-line diagnostics, copy, and save. Conversion runs offline and never executes the input. Unsupported syntax produces explicit diagnostics and an execution guard.
+需要 Python 3.10+ 和 Tkinter，无第三方 Python 运行依赖。
 
-**转换目标与当前状态：**输出不依赖 Bash/WSL，外部程序仍需具备 Windows 版本及所需数据。当前是覆盖部分 Bash 语法的转换器，**尚未达到任意 `.sh` 全量等价转换**。转换没有 ERROR、已有测试通过，都不能证明任意输入的运行结果等价。已支持的部分文本操作仍存在记录在案的行为差异，详见 [原生转换兼容性审计](docs/compatibility.md)。
-
-**Target and status:** generated scripts do not depend on Bash/WSL; external programs still require Windows implementations and their data. This converter supports a subset of Bash and **does not provide equivalent conversion for arbitrary `.sh` files**. No ERROR diagnostics or passing tests establish universal equivalence. Some accepted text operations still differ in behavior; see the [native conversion compatibility audit](docs/compatibility.md).
-
-![Desktop interface / 桌面界面](docs/screenshot.png)
-
-## 简体中文
-
-## 打开与使用
-
-1. 下载或克隆项目后，双击 `Launch.cmd`。本机也可使用已创建的 **Bash 转 PowerShell** 桌面快捷方式。
-2. 在左侧粘贴 Bash 命令，或选择“打开 .sh 文件”。“载入示例”可用于试用。
-3. 点击“转换”或按 **Ctrl+Enter**。
-4. 查看下方诊断；双击诊断会定位到 Bash 输入行。
-5. 点击“复制脚本”或“保存 .ps1”。修改输入后，需要重新转换才能复制或保存。
-
-保存文件使用 UTF-8 BOM，以便 Windows PowerShell 5.1 正确读取中文。输出脚本兼容 Windows PowerShell 5.1 与 PowerShell 7。相对路径以运行时的当前目录为基准；在所需目录中运行，例如：
+1. 双击 `Launch.cmd`，或者运行 `python app.py`。
+2. 选择“打开 .sh 文件”，或粘贴命令。涉及子脚本时应打开原文件。
+3. 点击“转换”（Ctrl+Enter），查看诊断；双击诊断定位输入行。
+4. 复制或保存 `.ps1`。输入变化后需要重新转换。
 
 ```powershell
-.\converted.ps1
+python app.py examples/setup.sh -o converted.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\converted.ps1
+# 也可使用 pwsh -File .\converted.ps1
 ```
 
-运行桌面工具需要 **Python 3.10+ 和 Tkinter**，本机已具备。没有第三方运行依赖。也可直接运行：
+保存使用 UTF-8 BOM，保证 PowerShell 5.1 正确读取中文。生成脚本自动返回最终 Bash 状态，适用于命令行/CI；显式 `exit`、`return`、失败分支和 `set -e` 保留控制流。建议用独立脚本调用，不要用 dot-source 将完整输出脚本导入交互会话。
 
-```powershell
-python .\app.py
-```
+## 支持的常用语法
 
-可运行 `CreateShortcut.ps1` 创建指向当前项目的桌面快捷方式。可选安装方式：`python -m pip install .`，之后运行 `bash2ps1-gui`。
-
-## 支持范围（0.2.0）
-
-| Bash 步骤 | 转换方式 |
+| 范围 | 支持内容 |
 | --- | --- |
-| `NAME=value`、`export`、`unset` | 保存 Bash 变量；导出为进程环境变量 |
-| `$NAME`、`${NAME}`、`$?`、`$0`、`$1`、`~` | 普通变量、退出码、脚本位置、位置参数、用户目录 |
-| `${NAME:-value}`、`${NAME:?message}` 等 | 嵌套默认值、替代值、赋默认值和必填检查；按需展开 |
-| `$()`、反引号 | 捕获文本输出、去掉末尾换行，隔离目录与变量更改 |
-| `if/elif/else`、`while/until`、列表 `for`、`!` | 条件判断、重试循环、嵌套代码块和条件取反 |
-| 单/双引号、转义、反斜杠续行、注释、分号 | 按 Bash 引号边界解析 |
-| `&&`、`\|\|` | 按上一条步骤的成功或失败决定后续步骤，支持 5.1 |
-| `set -e/-u/-a`、对应 `+` 选项、`set -o pipefail` | 失败停止、未定义变量检查、自动导出、管道退出码 |
-| 命令前的 `NAME=value command` | 临时设置环境变量，执行后恢复 |
-| `cd`、`pwd`、`mkdir -p`、`touch` | 目录与文件操作；touch 保留已有内容 |
-| `cp`、`mv`、`rm` | PowerShell 文件命令；支持部分递归/强制选项 |
-| `echo`、多占位符 `printf` | `%s/%d/%i/%%`、换行/制表转义；printf 文件输出保留精确字节 |
-| `sleep`、`date -Is`、`dirname`、`basename` | PowerShell/.NET 原生命令，无需安装 Unix 工具 |
-| `find` | 单路径、深度、文件/目录类型、名称匹配；输出 Windows 绝对路径 |
-| `. ./.env`、`source helper.sh`、`bash child.sh` | 读取环境赋值；文件入口递归打包静态子脚本 |
-| `cat`、`grep`、`head`、`tail`、`wc -l` | UTF-8 文本处理，支持这些命令之间的文本管道 |
-| `> file`、`>> file` | 支持已转换文本命令的重定向，UTF-8 无 BOM、LF 换行 |
-| `test`、`[ ... ]` | 简单文件判断、字符串判断、整数比较 |
-| `git`、`python`、`pip`、`npm`、`node` 等 | 调用真实外部程序，保留参数并检查退出码 |
-| `curl`、`wget`、`tar` 等 | 调用真实外部程序；不会调用 PowerShell 同名别名 |
+| 参数与字符串 | 单/双引号、转义、ANSI-C 引号、续行、注释、分号、空参数、Unicode |
+| 变量 | 普通赋值、`+=`、`export`、`unset`、`local`、临时 `NAME=value command` |
+| 展开 | `$NAME`、`${NAME}`、默认值/替代值/赋默认值/必填检查、长度、常量切片、前后缀删除、替换、大小写、普通间接变量 |
+| 参数展开 | `$0`、位置参数、`$#`、`$?`、`$$`、`$@/$*`、`shift`、`set --`；引号保留参数边界 |
+| 数组 | 索引数组、常见关联数组赋值、元素取值、追加、全部元素/键、数组长度 |
+| 字段与文件展开 | `IFS` 字段拆分、通配符、花括号列表/范围、`~`；支持 `shopt` 的 nullglob/failglob |
+| 控制流 | `if/elif/else`、`while/until`、列表/C 风格 `for`、`case` 的 `;;` 分支、`&&/||/!`、组合命令及子 Shell |
+| 函数 | 两种常见定义写法、参数、局部变量、返回值、break/continue |
+| 算术 | 整数、变量、四则/取模、比较、位运算、赋值、自增/自减、三元及短路运算 |
+| 输入输出 | `$()`/反引号、`>`/`>>`/`<`、标准错误重定向与合并、here-document/here-string、`/dev/null` |
+| 状态 | `set -e/-u/-a/-x`、对应关闭选项、`pipefail`、`PIPESTATUS` |
+| 文件入口 | 静态 `.sh/.bash` 依赖递归打包；`source` 共享变量、`bash child.sh` 隔离环境和目录 |
 
-输出脚本包含少量辅助函数，用于变量、退出码、Windows 参数引用和 UTF-8 写入。Python `-c` 等参数中的双引号、空参数、带空格及末尾反斜杠的参数，已在 5.1 和 7 中实际验证。
+命令替换保留无换行片段的拼接，仅去掉末尾 LF。输出和重定向不自动添加换行；外部程序的输入、二进制输出与错误流通过原始字节传递。Windows 上错误流合并使用同一系统管道，保留写入顺序。
 
-## 诊断含义与边界
+## 支持的常用命令
 
-- **待处理（ERROR）**：不能可靠转换。输出脚本顶部会加入 `throw`，在执行任何步骤之前停止。修正输入后重新转换。
-- **提示（WARNING）**：可生成脚本，但某些行为有差异，例如正则表达式、未加引号变量的拆分、文件复制覆盖或外部程序可用性。提示也会写入脚本注释。
+| 类别 | 命令及主要选项 |
+| --- | --- |
+| 文件/目录 | `cd/pwd/pushd/popd`、`mkdir -p`、`touch`、`rmdir`、`cp -r/-R/-a/-f`、`mv -f`、`rm -r/-f`、`ln -s/-f` |
+| 文本输出 | `echo -n/-e/-E`；`printf` 的常见字符串、整数、浮点、进制、宽度、精度及 `%b`/转义、`-v` |
+| 读取/匹配 | `cat -n/-b/-s/-v/-A/-E/-T`；`grep -F/-E/-i/-v/-n/-c/-q/-o/-w/-x/-l/-L/-r/-m/-e/-f/-A/-B/-C` |
+| 选择/统计 | `head/tail -n/-c`（含负数 head、从第 N 行 tail）；`wc -l/-w/-m/-c`，按实际 LF/字节计数 |
+| 排序/字段 | `sort -r/-n/-f/-u/-s/-k/-t/-o`、`uniq -c/-d/-u/-i`、`cut -f/-b/-c/-d/-s`、`tr -d/-s/-c` 和常见字节字符集 |
+| 常见文本程序 | `sed` 的 s 替换、地址 d/p/q、`-n/-E/-e/-i`；`awk` 的字段打印、NR/NF、简单列求和 |
+| 组合/辅助 | `tee -a`、`xargs -0/-n/-I/-r/-d`、`read -r/-a/-p`、`seq`、`sleep`、ISO/常见格式 `date`、`dirname/basename/realpath` |
+| 路径/环境 | `find -mindepth/-maxdepth/-type/-name/-iname/-print/-print0`、`env`、`printenv`、程序路径查询 |
+| 外部程序 | `git/python/pip/node/npm/docker/uv/curl/tar/ssh` 等调用已安装的 Windows 可执行程序；python3/pip3 映射为 python/pip |
 
-这是面向安装、配置、构建等**常见步骤**的转换器，不是完整 Bash 编译器。仍会将以下内容标为待处理：`case`、函数、算术展开、数组、参数切片、`$@/$*`、here-document、后台任务、显式子 Shell、输入和错误重定向、命令参数中的未加引号通配符、复杂 Unix 文本工具、`sudo`/Linux 包管理器、`chmod/chown` 等。列表 `for` 不实施 Bash 单词拆分或文件通配展开。
+`sed/awk` 支持表中的常见程序，不是这两种语言的完整解释器。固定文本优先用 `grep -F`；依赖高级 GNU 正则或区域设置的表达式需要核对。支持的选项由 `command_specs.py` 明确列出，超出范围会报告诊断。
 
-Unix 的 `/home/...`、`/tmp/...`、`/dev/null` 等绝对路径不会自动映射到 Windows。`PATH` 的冒号分隔和 Unix 路径也不会猜测转换。外部程序需要在 Windows 中安装并能通过 PATH 找到；本工具不会安装程序。Windows 环境变量不区分大小写。
+## 项目文件与 Windows 适配
 
-`grep` 无匹配时保留退出码 1，`pipefail` 使用最右侧失败步骤的退出码；复杂正则需检查，固定字符串优先使用 `grep -F`。`wc -l` 按文本行统计，末尾没有换行时可能与 Bash 不同。二进制输出、外部程序管道及外部程序 `>` 重定向会阻止转换；下载文件建议使用 `curl -o`。
+- 文件入口将原 `.sh` 路径用作 `$0`，例如 `cd "$(dirname "$0")/.."` 能定位原项目。静态子脚本嵌入同一个输出；原项目搬家后应重新转换。
+- `.env` 在运行时读取，转换时不读取或嵌入其中的秘密。支持普通 `NAME=value`、引号、简单变量、注释和 `export`；其他 Shell 程序不能作为环境文件加载。
+- 文件路径显示使用 Windows 路径；PATH 使用 Windows 分号分隔。外部程序、数据和对应目录仍需在 Windows 可用。
+- 符号链接、读写权限和文件元数据依赖 Windows 文件系统及当前权限，不能代替 Unix 的权限模型。
+- 管道面向有限输出的自动化命令，阶段之间缓冲字节；持续日志、无穷输出、TTY 交互、Unix 信号和 SIGPIPE 行为不在等价保证范围。
+- 后台作业、trap、动态 eval/exec、进程替换、任意文件描述符、Linux 包管理/内核/权限专用操作以及未列出的工具选项仍需人工适配。
 
-Windows `.cmd/.bat` 参数中出现双引号、`%`、`!` 或换行时会阻止转换或在运行时停止，避免批处理再次解释参数。临时环境赋值与同一命令中的变量引用组合，需要人工改写其展开顺序。未加引号变量按单个字符串传递；本工具不实施 Bash 的单词拆分。
+**ERROR** 会在所有步骤之前加停止保护。**WARNING** 提醒 Windows 外部依赖、路径或正则适配。1.0.0 的结题范围是上表所列的常用、可移植脚本；不宣称任意 Linux 脚本都可以无条件移植。
 
-`&&/||` 保留步骤间的成功与失败分支；生成脚本不主动调用 `exit`，最后一步失败且未设置 `set -e` 时，PowerShell 进程退出码不保证与 Bash 脚本一致。需要作为 CI 进程使用时，应检查最终 `$script:B2PSStatus` 并自行决定 `exit`。
-
-## 转换整个脚本及子脚本
-
-请用“打开 .sh 文件”选择原文件。文件入口会解析 `bash scripts/child.sh` 或 `source helper.sh`，递归读取同一项目中的静态子脚本并嵌入一个 `.ps1`，无需 Bash。`bash child.sh` 仅继承已导出的变量，执行后恢复父脚本目录和环境；`source helper.sh` 共享本地变量。
-
-打开文件时 `$0` 对应原 `.sh` 路径，因此 `cd "$(dirname "$0")/.."` 能定位原项目。输出可以保存到其他目录；原项目搬家后需重新转换。纯粘贴模式缺少文件位置，涉及子脚本时会提示改用文件入口，不会生成缺少子脚本的半成品。
-
-`.env` 在脚本运行时读取，转换时不会读取或嵌入秘密。支持 `NAME=value`、引号、普通变量引用、注释和 `export`；`set -a` 会自动导出。复杂默认表达式、命令替换或其他 Shell 语句会在运行时明确报错。`.sh/.bash` 的 source 按子脚本转换，其他 source 文件按环境赋值文件读取。
-
-`find` 支持 `-mindepth/-maxdepth/-type d或f/-name/-iname`，结果按名称排序。`date` 支持 ISO 时间和常见格式，`printf` 支持 `%s/%d/%i/%%`；文本管道和命令替换按文本行处理，独立控制台输出的无末尾换行 printf 会显示为一行。无法无损处理的二进制管道仍会阻止转换。
-
-原始 Qwen 工作流位于 `tests/fixtures/scripts/`。回归测试用本地模拟程序代替下载和训练，验证实际转换后的完整流程；真实训练仍需要原项目的 Python 环境、依赖和数据。
-
-## 可选命令行入口
-
-```powershell
-python .\app.py .\examples\setup.sh -o .\converted.ps1
-```
-
-没有 `-o` 时输出脚本到标准输出。诊断写入标准错误。返回码：`0` 转换完成，`2` 存在待处理项，`1` 文件读取或写入失败。
-
-## 验证
+## 验证与验收
 
 ```powershell
 python -m unittest discover -s tests -v
+python tests/preview_ui.py
 ```
 
-测试覆盖引号、变量、保护机制和两种 PowerShell 的实际执行，包括中文文件、带空格路径、UTF-8 重定向、touch 不截断、条件连接、外部退出码、临时环境恢复及外部参数传递。测试只在项目的 `.test-work` 临时子目录操作文件。
+对照测试使用真实 Git Bash 和两种 PowerShell，检查标准输出、标准错误、退出码及文件内容。Git Bash 只用于开发验证，生成脚本不依赖它。CI 设置 `B2PS_REQUIRE_BASH=1`，缺少参考运行时会失败，不能将跳过对照测试视为通过。核心验证结果、历史问题和结题范围见 [验收记录](docs/compatibility.md)。
 
-语法参考：[Bash 手册](https://www.gnu.org/software/bash/manual/bash.html)、[PowerShell 参数解析](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing)、[PowerShell 条件连接运算符](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pipeline_chain_operators)。
+CLI 返回码：0 转换完成，2 存在待处理项，1 文件读写失败。可选安装：`python -m pip install .`，之后运行 `bash2ps1-gui`。
 
 ## English
 
-### What it does
+**Native Bash-to-PowerShell conversion for common, portable automation scripts.** Version 1.0.0 covers common commands, functions/local variables, indexed and basic associative arrays, integer arithmetic, loops/case, quoted argument expansion, globbing, substitutions, here-documents, redirection and finite pipelines.
 
-`bash2ps1` translates common Bash command sequences into self-contained PowerShell scripts. It is intended for Windows users following Bash-oriented setup instructions. The desktop interface is in Chinese; this guide describes each action in English.
+Run `python app.py` or double-click `Launch.cmd`. Open the original `.sh` file to embed its static script dependencies. CLI: `python app.py input.sh -o output.ps1`. Run the output with Windows PowerShell 5.1 or PowerShell 7. Saved files include a UTF-8 BOM; generated scripts return their final shell status.
 
-The converter parses quote boundaries and operators instead of blindly replacing command names. Generated scripts include helper functions for Bash-style variables, step status, temporary environment variables, Windows native arguments, and UTF-8 text output. Conversion never runs the pasted commands or makes network requests.
+Conversion is offline and never executes the input. Generated scripts require no Bash/WSL or third-party Python runtime package. External commands still require Windows executables and project data. Output/argument semantics are verified against real Bash, including exact text fragments, native byte streams, environment isolation and return codes.
 
-### Quick start
+The tables above are the supported contract. `sed` supports common substitutions and addressed d/p/q; `awk` supports common field printing and simple sums. Advanced GNU/locale-dependent regex, Unix permissions/kernel/package operations, background jobs, trap/eval/exec, arbitrary descriptors, infinite/interactive streaming and signal/SIGPIPE behavior require adaptation. Paths and filesystem permissions follow Windows. Finite pipelines buffer between stages.
 
-Requires **Python 3.10+ with Tkinter on Windows**. There are no third-party runtime dependencies.
+Run `python -m unittest discover -s tests -v` for regressions and Bash/PowerShell differential comparisons. Git Bash is a test dependency only. See the [acceptance record](docs/compatibility.md) for scope and evidence.
 
-```powershell
-git clone https://github.com/uestczhaoyan-gif/bash2ps1.git
-cd bash2ps1
-python .\app.py
-```
-
-You can also double-click `Launch.cmd`. Run `CreateShortcut.ps1` to create a desktop shortcut for your local checkout. Optional package installation:
-
-```powershell
-python -m pip install .
-bash2ps1-gui
-```
-
-1. Paste your Bash commands into the left editor, or use **打开 .sh 文件** (Open file).
-2. Select **载入示例** (Load example) to try the included example.
-3. Click **转换** (Convert), or press **Ctrl+Enter**.
-4. Review the diagnostics. Double-click an issue to locate its source line.
-5. Use **复制脚本** (Copy script) or **保存 .ps1** (Save script).
-
-Changing the input disables copy and save until the new text is converted. Saved scripts use UTF-8 with a BOM so Windows PowerShell 5.1 can read Chinese correctly. Relative paths resolve from your current working directory when you run the resulting script.
-
-### Supported steps
-
-| Bash feature | Translation |
-| --- | --- |
-| Assignments, `export`, `unset` | Case-sensitive local variables and Windows process environment |
-| `$NAME`, `${NAME}`, `$?`, `$0`, `$1`, `~` | Values, status, source path, arguments, user directory |
-| `${NAME:-value}`, `${NAME:?message}` | Lazy nested defaults, alternatives, assignment and required checks |
-| `$()`, backticks, `if`, `while`, `until`, list `for`, `!` | Text capture, subshell isolation, conditions and loops |
-| Quotes, escapes, continuations, comments, semicolons | Quote-aware parsing |
-| `&&`, `\|\|` | Success/failure branches compatible with PowerShell 5.1 |
-| `set -e/-u/-a`, corresponding `+` options, `pipefail` | Failure handling, undefined values, automatic export and pipeline status |
-| `NAME=value command` | Temporary process environment, restored afterward |
-| `cd`, `pwd`, `mkdir`, `touch`, `cp`, `mv`, `rm` | Directory/file operations with selected options |
-| `echo`, multi-placeholder `printf` | Text output and exact printf file bytes |
-| `sleep`, `date`, `dirname`, `basename`, common `find` options | Native PowerShell/.NET implementations |
-| `. ./.env`, `source helper.sh`, `bash child.sh` | Assignment-file loading and embedded script dependencies |
-| `cat`, `grep`, `head`, `tail`, `wc -l` | UTF-8 text processing and supported text pipelines |
-| `>`, `>>` | Text-only output redirection, UTF-8 without BOM and LF line endings |
-| `test`, `[ ... ]` | Simple file, string, and integer tests |
-| `git`, `python`, `npm`, `node`, `curl`, and others | Actual external programs with quoted arguments and exit-status checks |
-
-### Diagnostics and limitations
-
-**ERROR / 待处理** means the converter cannot preserve the operation reliably. A `throw` guard is placed before all generated steps. Fix the input and convert again before running the script.
-
-**WARNING / 提示** identifies a behavior difference that needs review. Warnings also appear as comments in the saved script.
-
-This is a practical command-step converter, not a complete Bash compiler. Remaining unsupported constructs include `case`, functions, arithmetic, arrays, parameter slicing, `$@/$*`, here-documents, background jobs, explicit subshells, input/error redirection, unquoted wildcard command arguments, Unix-only package managers and permission operations, and complex text tools such as `sed` and `awk`. List `for` loops do not perform shell word splitting or filename expansion.
-
-Unix absolute paths are not mapped to Windows locations. `PATH` assignments need manual adaptation. External tools must already be installed on Windows, and their options may differ. Windows environment names are case-insensitive even though local Bash variables remain case-sensitive.
-
-`grep` retains exit status 1 when there are no matches; `pipefail` returns the rightmost failing text stage's status. Regex behavior follows .NET; use `grep -F` for fixed strings. `wc -l` counts text lines and may differ for a file without a final newline. Binary output, external-program pipelines, and external output redirection are blocked; use `curl -o` for downloads.
-
-Unquoted variable values are passed as a single string, without Bash word splitting or glob expansion. A temporary environment assignment combined with variable references in the same command needs manual expansion-order review. Batch-file arguments containing quotes, `%`, `!`, or newlines are blocked during conversion or stopped at runtime to avoid a second interpretation by `.cmd`/`.bat`.
-
-The generated script does not call `exit`. If the final step fails without `set -e`, the PowerShell process exit code is not guaranteed to equal the Bash script's exit code. For CI process integration, inspect `$script:B2PSStatus` and explicitly decide whether to exit.
-
-### File conversion and workflow support
-
-Open the original `.sh` file or use the CLI to embed recursively referenced static child scripts into one output. `bash child.sh` inherits exports and restores the parent directory and environment; `source helper.sh` shares variables. `$0` refers to the original input path, so directory changes based on `dirname "$0"` work even if the output is saved elsewhere. Reconvert after moving the original project. Pasted text without file context cannot include child files.
-
-Environment files are read at runtime, never embedded. The assignment reader accepts `NAME=value`, quotes, simple variables, comments and `export`, and rejects executable Shell statements or complex expansions. Non-`.sh/.bash` source files use this reader. `find` emits sorted absolute Windows paths. Text pipelines and captures use text lines; standalone printf output without a final newline is displayed as a line, while printf file redirection preserves exact text.
-
-The Qwen workflow regression fixtures run with local stub programs on both PowerShell versions. They verify retry handling, child training, prediction, evaluation and completion-file bytes without downloading or training a model. Actual execution still requires the original project's Python dependencies and data.
-
-### Command-line use
-
-```powershell
-python .\app.py .\examples\setup.sh -o .\converted.ps1
-```
-
-Without `-o`, the script is written to standard output. Diagnostics are written to standard error. Exit codes: `0` conversion completed, `2` unsupported input remains, `1` input/output error.
-
-### Development and validation
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
-The test suite checks translation boundaries and executes generated scripts in Windows PowerShell 5.1 and PowerShell 7 when available. It covers Unicode and spaced paths, UTF-8 output, non-truncating touch, short-circuit chains, native exit codes, environment restoration, native argument quoting, and the unsupported-input guard. File operations are limited to temporary directories beneath `.test-work`. GitHub Actions runs the suite on Windows with Python 3.10 and 3.13.
-
-```text
-bash2ps1/
-├── app.py                    # Desktop UI and CLI
-├── converter.py              # Translator and recursive file bundling
-├── shellsyntax.py            # Quote-aware lexer and structured parser
-├── psruntime.py              # Embedded PowerShell workflow helpers
-├── Launch.cmd                # Windows launcher
-├── CreateShortcut.ps1        # Portable shortcut creation
-├── pyproject.toml            # Optional package installation
-├── README.md                 # Chinese and English documentation
-├── CHANGELOG.md
-├── examples/                 # Bash and generated PowerShell examples
-├── docs/screenshot.png
-├── tests/                    # Unit/integration tests and optional UI preview
-└── .github/workflows/        # Windows CI
-```
-
-References: [Bash manual](https://www.gnu.org/software/bash/manual/bash.html), [PowerShell argument parsing](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing), [PowerShell pipeline chain operators](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pipeline_chain_operators).
+References: [Bash manual](https://www.gnu.org/s/bash/manual/bash.html), [GNU Coreutils](https://www.gnu.org/software/coreutils/manual/coreutils.html), [PowerShell parsing](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing).

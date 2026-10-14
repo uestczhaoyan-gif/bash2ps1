@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0
+
+- 完成面向常用、可移植 Bash 自动化脚本的核心结题版本，输出原生 PowerShell 5.1/7。
+- 用原始字节流修正 printf、命令替换、重定向、wc 和外部程序管道，保留空参数、字段拆分、通配符及标准错误合并顺序。
+- 补齐函数/local/return、索引与常见关联数组、整数算术/C 风格 for、case、组合命令/子 Shell、位置参数、here-document 及常用重定向。
+- 扩展 cat/grep/head/tail/wc/sort/uniq/cut/tr/tee/sed/awk/xargs/read/seq/env 等常用命令，明确常见选项与无法移植操作的诊断。
+- 修正 PowerShell 5.1/7 的空环境变量与删除变量差异，自动返回最终 Bash 状态。
+- 加入真实 Bash 与两种 PowerShell 的对照验收，比较输出、错误流、退出码及文件内容；保留 Qwen 流水线模拟回归。
+- 同步版本、打包模块、README、验收记录和 Windows CI；生成脚本不依赖 Bash/WSL。
+
 ## 0.2.0
 
 - 说明原生 PowerShell 转换目标与实际兼容边界，新增 Bash/PowerShell 输出差异审计；不将已通过用例宣传为任意脚本等价转换。
