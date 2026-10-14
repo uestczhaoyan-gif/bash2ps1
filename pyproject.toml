@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bash2ps1"
-version = "0.1.0"
+version = "0.2.0"
 description = "A local desktop converter for common Bash steps to PowerShell 5.1 and 7"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,4 +22,4 @@ bash2ps1 = "app:main"
 bash2ps1-gui = "app:gui_main"
 
 [tool.setuptools]
-py-modules = ["app", "converter"]
+py-modules = ["app", "converter", "shellsyntax", "psruntime"]

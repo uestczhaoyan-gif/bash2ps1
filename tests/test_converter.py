@@ -43,11 +43,11 @@ class TranslationTests(unittest.TestCase):
                 self.assertFalse(convert(source).errors)
 
     def test_unsupported_input_is_guarded(self):
-        sources = ['sudo apt install x', 'if test -f a; then echo ok; fi',
-                   'for x in a b; do echo "$x"; done', 'cat <<EOF\nx\nEOF',
-                   'echo $(whoami)', 'NAME=$(date)', 'echo `date`',
-                   'echo ${NAME:-default}', 'echo $1', "echo $'\\n'", 'echo *.txt',
-                   'chmod +x file', 'echo hello & echo bye', 'set -euo pipefail',
+        sources = ['sudo apt install x', 'if test -f a; then echo ok',
+                   'for x in a b; do echo "$x"', 'cat <<EOF\nx\nEOF',
+                   'echo $((1+2))', 'NAME=$(date', 'echo `date',
+                   'echo ${NAME:1:2}', 'echo $!', "echo $'\\n'", 'echo *.txt',
+                   'chmod +x file', 'echo hello & echo bye', 'set -o noclobber',
                    'export PATH="$HOME/bin:$PATH"', 'git show | head', 'curl URL > out',
                    'echo "unfinished', 'echo abc\\', 'echo a 2>&1', 'echo ok &&',
                    'bash other.sh', 'unknown < file', 'grep -n foo file']

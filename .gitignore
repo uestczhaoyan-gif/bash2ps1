@@ -6,3 +6,4 @@ build/
 dist/
 *.egg-info/
 cli-example.ps1
+outputs/

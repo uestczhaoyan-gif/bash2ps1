@@ -14,6 +14,14 @@ app.load_example()
 root.update()
 assert app.result and not app.result.errors
 assert str(app.copy_button['state']) == 'normal'
+fixture = Path(__file__).parent / 'fixtures' / 'scripts' / 'qwen35_08b_pipeline.sh'
+app.replace_input(fixture.read_text(encoding='utf-8'), fixture)
+root.update()
+assert app.source_path == fixture
+assert app.result and not app.result.errors
+assert 'jevforge.train' in app.result.script
+app.load_example()
+assert app.source_path is None
 app.copy()
 assert root.clipboard_get() == app.result.script
 app.input.insert('end', '\n# a change')

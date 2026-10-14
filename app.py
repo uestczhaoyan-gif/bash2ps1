@@ -7,17 +7,21 @@ import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from converter import Result, convert
+from converter import Result, convert, convert_file
 
 
 EXAMPLE = '''#!/usr/bin/env bash
-# 示例：创建项目、写入配置，再安装依赖
-set -e
-PROJECT="demo project"
+# 示例：默认值、命令替换、条件判断和多行输出
+set -euo pipefail
+PROJECT="${PROJECT:-demo project}"
 export APP_MODE=development
 mkdir -p "$PROJECT"
 cd "$PROJECT"
-printf '%s\\n' 'APP_MODE=development' > .env
+STAMP="$(date -Is)"
+printf 'APP_MODE=%s\\ncreated_at=%s\\n' "$APP_MODE" "$STAMP" > .env
+if test -f .env; then
+  echo "配置已生成：$STAMP"
+fi
 git init && echo "Git 初始化完成"
 npm --version || echo "请先安装 Node.js"
 '''
@@ -27,6 +31,7 @@ class App:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.result: Result | None = None
+        self.source_path: Path | None = None
         self.dirty = True
         self.issue_rows = []
         root.title('Bash → PowerShell · 步骤转换器')
@@ -91,7 +96,7 @@ class App:
         self.diagnostics.tag_configure('error', foreground='#b4232d')
         self.diagnostics.tag_configure('warning', foreground='#9a6510')
         self.diagnostics.bind('<Double-1>', self.go_to_issue)
-        ttk.Label(outer, text='支持常见命令、变量、续行、条件连接和文本管道。复杂 Bash 结构会标出待处理项。', style='Sub.TLabel').pack(anchor='w', pady=(9, 0))
+        ttk.Label(outer, text='支持条件、循环、命令替换和嵌套默认值。打开 .sh 可自动打包子脚本；转换不会执行输入。', style='Sub.TLabel').pack(anchor='w', pady=(9, 0))
         root.bind('<Control-Return>', lambda event: self.run_convert())
         root.bind('<Control-o>', lambda event: self.open_file())
         root.bind('<Control-s>', lambda event: self.save())
@@ -136,7 +141,7 @@ class App:
             self.status.set('请先粘贴 Bash 命令或载入示例。')
             return
         try:
-            result = convert(source)
+            result = convert(source, self.source_path)
         except Exception as error:
             messagebox.showerror('转换失败', str(error), parent=self.root)
             return
@@ -148,8 +153,8 @@ class App:
             if line.startswith('#'):
                 self.output.tag_add('error' if '# ERROR' in line else 'comment', f'{number}.0', f'{number}.end')
         self.output.configure(state='disabled')
-        if '# Bash line' in result.script:
-            first_step = result.script[:result.script.index('# Bash line')].count('\n') + 1
+        if not result.errors and '# Main script' in result.script:
+            first_step = result.script[:result.script.index('# Main script')].count('\n') + 1
             self.output.yview(f'{first_step}.0')
         self.diagnostics.delete(*self.diagnostics.get_children())
         self.issue_rows = result.issues
@@ -164,7 +169,9 @@ class App:
         self.copy_button.configure(state='normal')
         self.save_button.configure(state='normal')
 
-    def replace_input(self, source):
+    def replace_input(self, source, path: Path | None = None):
+        self.source_path = path
+        self.root.title('Bash → PowerShell · ' + (path.name if path else '步骤转换器'))
         self.input.delete('1.0', 'end')
         self.input.insert('1.0', source)
         self.root.update_idletasks()
@@ -175,6 +182,8 @@ class App:
         self.replace_input(EXAMPLE)
 
     def clear(self):
+        self.source_path = None
+        self.root.title('Bash → PowerShell · 步骤转换器')
         self.input.delete('1.0', 'end')
         self.output.configure(state='normal')
         self.output.delete('1.0', 'end')
@@ -189,7 +198,7 @@ class App:
         path = filedialog.askopenfilename(parent=self.root, title='打开 Bash 脚本', filetypes=[('Bash / 文本文件', '*.sh *.bash *.txt'), ('所有文件', '*.*')])
         if path:
             try:
-                self.replace_input(Path(path).read_text(encoding='utf-8-sig'))
+                self.replace_input(Path(path).read_text(encoding='utf-8-sig'), Path(path))
             except (OSError, UnicodeError) as error:
                 messagebox.showerror('无法打开', '请使用 UTF-8 编码的文本文件。\n\n' + str(error), parent=self.root)
 
@@ -203,7 +212,8 @@ class App:
         if not self.result or self.dirty:
             self.status.set('请先转换当前输入，再保存。')
             return
-        path = filedialog.asksaveasfilename(parent=self.root, title='保存 PowerShell 脚本', defaultextension='.ps1', initialfile='converted.ps1', filetypes=[('PowerShell 脚本', '*.ps1')])
+        filename = self.source_path.with_suffix('.ps1').name if self.source_path else 'converted.ps1'
+        path = filedialog.asksaveasfilename(parent=self.root, title='保存 PowerShell 脚本', defaultextension='.ps1', initialfile=filename, filetypes=[('PowerShell 脚本', '*.ps1')])
         if path:
             try:
                 # UTF-8 BOM is necessary for Chinese in Windows PowerShell 5.1.
@@ -247,7 +257,7 @@ def main():
     args = parser.parse_args()
     if args.input:
         try:
-            result = convert(args.input.read_text(encoding='utf-8-sig'))
+            result = convert_file(args.input)
             if args.output:
                 args.output.write_text(result.script, encoding='utf-8-sig', newline='\r\n')
             else:
